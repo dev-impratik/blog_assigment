@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use Validator;
+use App\Http\Requests\LoginRequest;
+
   
   
 class AuthController extends Controller
@@ -17,23 +19,42 @@ class AuthController extends Controller
      */
     public function register() {
         $validator = Validator::make(request()->all(), [
-            'name' => 'required',
+            'name' => 'required|string|max:255',
+            'username' => 'required|min:6|unique:users',
             'email' => 'required|email|unique:users',
             'password' => 'required|confirmed|min:8',
         ]);
-  
-        if($validator->fails()){
-            return response()->json($validator->errors()->toJson(), 400);
+    
+        if ($validator->fails()) {
+            return response()->json(["success"=> false, "error"=> true, "message" => $validator->errors()], 400);
         }
-  
-        $user = new User;
-        $user->name = request()->name;
-        $user->email = request()->email;
-        $user->password = bcrypt(request()->password);
-        $user->save();
-  
-        return response()->json($user, 201);
+    
+        try {
+            $userData = request()->only('name', 'email', 'username', 'password');
+            $userData['password'] = bcrypt($userData['password']);
+            
+            $user = User::create($userData);
+    
+            // Assign default role
+            try {
+                $user->assignRole('user');
+            } catch (\Exception $e) {
+                return response()->json(["success"=> false, "error"=> true, "message" => "Role assignment failed"], 500);
+            }
+    
+            return response()->json([
+                'message' => 'User registered successfully.',
+                'user' => $user,
+                "success"=> true,
+                "error"=> false
+            ], 201);
+    
+        } catch (\Exception $e) {
+            return response()->json(["success"=> false, "error"=> true, "message" => "User registration failed."], 500);
+        }
     }
+    
+    
   
   
     /**
@@ -41,15 +62,16 @@ class AuthController extends Controller
      *
      * @return \Illuminate\Http\JsonResponse
      */
-    public function login()
+    public function login(LoginRequest $request)
     {
-        $credentials = request(['email', 'password']);
-  
+        $field = filter_var($request->input('login'), FILTER_VALIDATE_EMAIL) ? 'email' : 'username';
+        $request->merge([$field => $request->input('login')]);
+        $credentials = $request->only($field, 'password');
         if (! $token = auth()->attempt($credentials)) {
-            return response()->json(['error' => 'Unauthorized'], 401);
+            return response()->json(['error' => 'Incorrect username or password'], 401);
         }
-  
         return $this->respondWithToken($token);
+
     }
   
     /**
@@ -71,7 +93,7 @@ class AuthController extends Controller
     {
         auth()->logout();
   
-        return response()->json(['message' => 'Successfully logged out']);
+        return response()->json(['message' => 'Successfully logged out'], 200);
     }
   
     /**
