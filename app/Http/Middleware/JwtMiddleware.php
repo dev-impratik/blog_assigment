@@ -9,6 +9,8 @@ use Tymon\JWTAuth\Facades\JWTAuth;
 use Tymon\JWTAuth\Exceptions\JWTException;
 use Tymon\JWTAuth\Exceptions\TokenExpiredException;
 use Tymon\JWTAuth\Exceptions\TokenInvalidException;
+use App\Http\Controllers\AuthController;
+
 
 class JwtMiddleware
 {
@@ -28,6 +30,7 @@ class JwtMiddleware
             }
             $request->merge(['authenticated_user' => $user]);
         } catch (TokenExpiredException $e) {
+            return (new AuthController)->refresh();
             return response()->json(['error' => 'Token expired'], 401);
         } catch (TokenInvalidException $e) {
             return response()->json(['error' => 'Token invalid'], 401);
